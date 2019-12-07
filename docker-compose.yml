@@ -1,0 +1,73 @@
+version: '3.7'
+
+services:
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/config.yaml
+    volumes:
+      - ./loki:/etc/loki
+      # These mounts will persist log data
+      # - ./loki-data/index:/tmp/loki/index
+      # - ./loki-data/chunks:/tmp/loki/chunks
+    networks:
+      - logging
+
+  # promtail:
+  #   image: grafana/promtail:latest
+  #   volumes:
+  #     - ./promtail:/etc/promtail
+  #     - ./promtail-data:/tmp/
+  #     # As Promtail reads data from sources (files and systemd journal, if configured),
+  #     #  it will track the last offset it read in a positions file. By default, the positions
+  #     #  file is stored at /var/log/positions.yaml
+  #     - ./logs:/logs
+  #   ports:
+  #     - "9080:9080"
+  #   command: -config.file=/etc/promtail/config.yaml
+  #   networks:
+  #     - logging
+
+  grafana:
+    image: grafana/grafana:master
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./graphana/conf/conf.ini:/usr/share/grafana/conf/conf.ini
+      # - ./graphana/datasources:/usr/share/grafana/conf/provisioning/datasources
+      - ./graphana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - logging
+
+  fluentd:
+    build:
+      context: .
+      dockerfile: ./Dockerfile-fluentd
+    # image: grafana/fluent-plugin-grafana-loki:master
+    command:
+      - "fluentd"
+      - "-v"
+      - "-p"
+      - "/fluentd/plugins"
+    environment:
+      LOKI_URL: http://loki:3100
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # - /:/docker/var/lib/docker/containers
+      - ./fluentd:/fluentd/etc/loki
+      # For Testing
+      # - ./logs:/var/lib/docker/containers
+      - /var/lib/docker/containers:/var/lib/docker/containers
+    networks:
+      - logging
+
+networks:
+  api:
+    driver: overlay
+    external: true
+  logging:
+    driver: overlay
+    external: true
